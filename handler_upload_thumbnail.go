@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,8 +45,19 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
 		return
 	}
-	mediaType := header.Header.Get("Content-Type")
+	headerType := header.Header.Get("Content-Type")
 	defer file.Close()
+
+	// Mime the media type to make sure it is correct
+	mediaType, _, err := mime.ParseMediaType(headerType)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid media type", err)
+		return
+	}
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "Invalid media type", err)
+		return
+	}
 
 	// Get video metadata
 	video, err := cfg.db.GetVideo(videoID)
