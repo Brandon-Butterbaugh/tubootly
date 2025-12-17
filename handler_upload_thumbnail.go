@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -71,7 +73,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Get paths for the asset
-	assetPath := getAssetPath(videoIDString, mediaType)
+	rndm := make([]byte, 32)
+	_, err = rand.Read(rndm)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error reading from crypto/rand", err)
+		return
+	}
+	rndmString := base64.RawURLEncoding.EncodeToString(rndm)
+	assetPath := getAssetPath(rndmString, mediaType)
 	if assetPath == "" {
 		respondWithError(w, http.StatusBadRequest, "Invalid media type", nil)
 		return
@@ -105,7 +114,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	respondWithJSON(w, http.StatusOK, video)
 }
 
-func getAssetPath(videoID string, mediaType string) string {
+func getAssetPath(rndmString string, mediaType string) string {
 	// split media type for ext
 	index := strings.LastIndex(mediaType, "/")
 	if index == -1 {
@@ -115,7 +124,7 @@ func getAssetPath(videoID string, mediaType string) string {
 
 	assetPath := fmt.Sprintf(
 		"/assets/%s.%s",
-		videoID,
+		rndmString,
 		ext,
 	)
 
