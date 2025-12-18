@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -93,8 +94,22 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Process the video and open it
+	processedFile, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to process video file", err)
+		return
+	}
+	processed, err := os.Open(processedFile)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to open processed video", err)
+		return
+	}
+	defer processed.Close()
+	defer os.Remove(processedFile)
+
 	// Get aspect ratio
-	ratio, err := getVideoAspectRatio(tempFile.Name())
+	ratio, err := getVideoAspectRatio(processedFile)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error determining aspect ratio", err)
 		return
@@ -133,7 +148,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		&s3.PutObjectInput{
 			Bucket:      &cfg.s3Bucket,
 			Key:         &keyString,
-			Body:        tempFile,
+			Body:        processed,
 			ContentType: &mediaType,
 		},
 	)
@@ -157,4 +172,30 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	respondWithJSON(w, http.StatusOK, video)
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	// Set output file path
+	outPath := filePath + ".processing"
+
+	// Set the command
+	cmd := exec.Command(
+		"ffmpeg",
+		"-i",
+		filePath,
+		"-c",
+		"copy",
+		"-movflags",
+		"faststart",
+		"-f",
+		"mp4",
+		outPath,
+	)
+
+	// Run the command
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+
+	return outPath, nil
 }
