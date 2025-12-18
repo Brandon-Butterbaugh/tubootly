@@ -57,7 +57,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if mediaType != "image/jpeg" && mediaType != "image/png" {
-		respondWithError(w, http.StatusBadRequest, "Invalid media type", err)
+		respondWithError(w, http.StatusBadRequest, "Invalid media type", nil)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if video.UserID != userID {
-		respondWithError(w, http.StatusUnauthorized, "User is not the video owner", err)
+		respondWithError(w, http.StatusUnauthorized, "User is not the video owner", nil)
 		return
 	}
 

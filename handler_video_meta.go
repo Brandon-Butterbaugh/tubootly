@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"math"
 	"net/http"
+	"os/exec"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
@@ -117,4 +121,65 @@ func (cfg *apiConfig) handlerVideosRetrieve(w http.ResponseWriter, r *http.Reque
 	}
 
 	respondWithJSON(w, http.StatusOK, videos)
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	// Set the command
+	cmd := exec.Command(
+		"ffprobe",
+		"-v",
+		"error",
+		"-print_format",
+		"json",
+		"-show_streams",
+		filePath,
+	)
+
+	// Run the command
+	var b bytes.Buffer
+	cmd.Stdout = &b
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	// Json parameters
+	type Stream struct {
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	}
+
+	type parameters struct {
+		Streams []Stream `json:"streams"`
+	}
+
+	// Unmarshal the stdout from the buffer
+	params := parameters{}
+	err = json.Unmarshal(b.Bytes(), &params)
+	if err != nil {
+		return "", err
+	}
+
+	// Determine aspect ratio
+	if len(params.Streams) == 0 {
+		return "", fmt.Errorf("no streams found in ffprobe output")
+	}
+
+	ratio := determineRatio(params.Streams[0].Width, params.Streams[0].Height)
+	return ratio, nil
+}
+
+func determineRatio(width, height int) string {
+	const tol = 100
+
+	landDiff := math.Abs(float64(width)*9 - float64(height)*16)
+	portDiff := math.Abs(float64(width)*16 - float64(height)*9)
+
+	if landDiff < tol && landDiff < portDiff {
+		return "16:9"
+	}
+	if portDiff < tol && portDiff < landDiff {
+		return "9:16"
+	}
+	return "other"
 }

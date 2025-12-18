@@ -47,7 +47,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if video.UserID != userID {
-		respondWithError(w, http.StatusUnauthorized, "User is not the video owner", err)
+		respondWithError(w, http.StatusUnauthorized, "User is not the video owner", nil)
 		return
 	}
 
@@ -93,7 +93,20 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Create random 32 byte hex and add media extension for file key
+	// Get aspect ratio
+	ratio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error determining aspect ratio", err)
+		return
+	}
+	ratioKey := "other"
+	if ratio == "16:9" {
+		ratioKey = "landscape"
+	} else if ratio == "9:16" {
+		ratioKey = "portrait"
+	}
+
+	// Create random 32 byte hex and add media extension and ratio prefix for file key
 	rndm := make([]byte, 32)
 	_, err = rand.Read(rndm)
 	if err != nil {
@@ -108,13 +121,14 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	ext := mediaType[index+1:]
 	keyString := fmt.Sprintf(
-		"%s.%s",
+		"%s/%s.%s",
+		ratioKey,
 		rndmString,
 		ext,
 	)
 
 	// Put the object into the S3 Bucket
-	cfg.s3Client.PutObject(
+	_, err = cfg.s3Client.PutObject(
 		r.Context(),
 		&s3.PutObjectInput{
 			Bucket:      &cfg.s3Bucket,
@@ -123,6 +137,10 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 			ContentType: &mediaType,
 		},
 	)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to upload video", err)
+		return
+	}
 
 	// Update video url in database
 	videoURL := fmt.Sprintf(
